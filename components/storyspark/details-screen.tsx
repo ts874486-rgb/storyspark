@@ -1,15 +1,16 @@
 'use client'
 
-import type { FormEvent, ReactNode } from 'react'
+import type { FormEvent, KeyboardEvent, ReactNode } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight, Palette, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { AGES, THEMES, type Gender, type ThemeId } from './themes'
+import { AGES, NAME_PATTERN, formatChildName, type Gender, type StoryTheme } from './themes'
 
 type DetailsScreenProps = {
   name: string
   age: string
   gender: Gender
-  themeId: ThemeId | null
+  theme: StoryTheme | null
+  canSubmit: boolean
   onNameChange: (value: string) => void
   onAgeChange: (value: string) => void
   onGenderChange: (value: Gender) => void
@@ -37,7 +38,8 @@ export function DetailsScreen({
   name,
   age,
   gender,
-  themeId,
+  theme: selectedTheme,
+  canSubmit,
   onNameChange,
   onAgeChange,
   onGenderChange,
@@ -45,12 +47,26 @@ export function DetailsScreen({
   onBack,
   onSubmit,
 }: DetailsScreenProps) {
-  const selectedTheme = THEMES.find((t) => t.id === themeId)
-  const canSubmit = name.trim().length > 0 && age !== '' && selectedTheme
+  const formattedName = formatChildName(name)
+  const nameInvalid = formattedName.length > 0 && !NAME_PATTERN.test(formattedName)
+  const missing = [
+    formattedName.length === 0 && 'a name',
+    age === '' && 'an age',
+    !selectedTheme && 'a theme',
+  ].filter(Boolean) as string[]
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    if (canSubmit) onSubmit()
+    if (!canSubmit) return
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+    onSubmit()
+  }
+
+  function handleNameKeyDown(e: KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== 'Enter' || e.nativeEvent.isComposing || e.keyCode === 229) return
+    e.preventDefault()
+    e.currentTarget.blur()
+    document.getElementById('child-age')?.focus()
   }
 
   return (
@@ -94,12 +110,24 @@ export function DetailsScreen({
             id="child-name"
             type="text"
             autoComplete="off"
+            autoCapitalize="words"
+            autoCorrect="off"
+            spellCheck={false}
+            enterKeyHint="next"
             maxLength={24}
             placeholder="e.g. Maya"
             value={name}
-            onChange={(e) => onNameChange(e.target.value)}
+            aria-invalid={nameInvalid}
+            aria-describedby={nameInvalid ? 'child-name-error' : undefined}
+            onChange={(e) => onNameChange(e.target.value.replace(/^\s+/, ''))}
+            onKeyDown={handleNameKeyDown}
             className="w-full bg-transparent font-serif text-xl font-medium placeholder:text-muted-foreground/50 focus:outline-none"
           />
+          {nameInvalid && (
+            <p id="child-name-error" className="mt-1.5 text-xs font-medium text-destructive">
+              Please use letters only (spaces, hyphens and apostrophes are fine).
+            </p>
+          )}
         </FieldCard>
 
         <FieldCard label="Child's Age" htmlFor="child-age">
@@ -189,11 +217,13 @@ export function DetailsScreen({
             className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-spark-gradient text-base font-bold text-white shadow-[0_12px_30px_-10px_rgba(231,154,196,0.9)] transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-ring/50"
           >
             <Sparkles className="size-5" aria-hidden="true" />
-            Generate Story Preview
+            Generate Magic Story
           </button>
           {!canSubmit && (
-            <p className="mt-3 text-center text-xs text-muted-foreground">
-              Add a name, age and theme to continue
+            <p className="mt-3 text-center text-xs text-muted-foreground" aria-live="polite">
+              {missing.length > 0
+                ? `Add ${missing.join(missing.length > 2 ? ', ' : ' and ').replace(/, (?=[^,]*$)/, ' and ')} to continue`
+                : 'Check the name above to continue'}
             </p>
           )}
         </div>

@@ -69,7 +69,47 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground font-sans;
+  @apply bg-background text-foreground font-sans;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+  }
+  button, select, label, a {
+  touch-action: manipulation;
+  }
+  }
+
+@keyframes float-soft {
+  0%, 100% { transform: translateY(0) rotate(-4deg); }
+  50% { transform: translateY(-12px) rotate(4deg); }
+}
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.2; transform: scale(0.7); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes progress-fill {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@utility animate-float-soft {
+  animation: float-soft 2.4s ease-in-out infinite;
+}
+
+@utility animate-twinkle {
+  animation: twinkle 1.6s ease-in-out infinite;
+}
+
+@utility animate-progress-fill {
+  transform-origin: left;
+  animation: progress-fill var(--progress-duration, 2.5s) linear forwards;
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
   }
 }
 

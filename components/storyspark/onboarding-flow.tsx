@@ -1,54 +1,88 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { DetailsScreen } from './details-screen'
+import { LoadingScreen } from './loading-screen'
 import { StoryPreview } from './story-preview'
 import { ThemeModal } from './theme-modal'
-import { THEMES, type Gender, type ThemeId } from './themes'
+import { NAME_PATTERN, THEMES, formatChildName, type Gender, type ThemeId } from './themes'
 import { WelcomeScreen } from './welcome-screen'
 
-type Step = 'welcome' | 'details' | 'preview'
+type Step = 'welcome' | 'details' | 'loading' | 'preview'
+
+const LOADING_DURATION_MS = 2500
+
+function isStep(value: unknown): value is Step {
+  return value === 'welcome' || value === 'details' || value === 'loading' || value === 'preview'
+}
 
 export function OnboardingFlow() {
-  const [step, setStep] = useState<Step>('welcome')
+  const searchParams = useSearchParams()
+  const stepParam = searchParams.get('step')
+  const step: Step = isStep(stepParam) ? stepParam : 'welcome'
   const [name, setName] = useState('')
   const [age, setAge] = useState('')
   const [gender, setGender] = useState<Gender>('girl')
   const [themeId, setThemeId] = useState<ThemeId | null>(null)
   const [themeModalOpen, setThemeModalOpen] = useState(false)
 
-  const selectedTheme = THEMES.find((t) => t.id === themeId)
+  const selectedTheme = THEMES.find((t) => t.id === themeId) ?? null
+  const childName = formatChildName(name)
+  const childAge = Number.parseInt(age, 10)
+  const isComplete =
+    childName.length > 0 && NAME_PATTERN.test(childName) && Number.isFinite(childAge) && selectedTheme !== null
 
-  function goTo(next: Step) {
-    setStep(next)
+  // Steps live in the URL so the Android back gesture/button walks back through the flow.
+  useEffect(() => {
+    setThemeModalOpen(false)
     window.scrollTo({ top: 0 })
-  }
+  }, [step])
+
+  const goTo = useCallback((next: Step, mode: 'push' | 'replace' = 'push') => {
+    const url = next === 'welcome' ? window.location.pathname : `?step=${next}`
+    if (mode === 'push') window.history.pushState(null, '', url)
+    else window.history.replaceState(null, '', url)
+  }, [])
+
+  const goBack = useCallback(() => window.history.back(), [])
+
+  const handleLoadingComplete = useCallback(() => goTo('preview', 'replace'), [goTo])
+
+  // A forward/back navigation can land on a step whose data is no longer valid; fall back to the form.
+  const visibleStep: Step = (step === 'preview' || step === 'loading') && !isComplete ? 'details' : step
 
   return (
     <main className="mx-auto min-h-dvh w-full max-w-md bg-background">
-      {step === 'welcome' && <WelcomeScreen onStart={() => goTo('details')} />}
+      {visibleStep === 'welcome' && <WelcomeScreen onStart={() => goTo('details')} />}
 
-      {step === 'details' && (
+      {visibleStep === 'details' && (
         <DetailsScreen
           name={name}
           age={age}
           gender={gender}
-          themeId={themeId}
+          theme={selectedTheme}
+          canSubmit={isComplete}
           onNameChange={setName}
           onAgeChange={setAge}
           onGenderChange={setGender}
           onOpenThemes={() => setThemeModalOpen(true)}
-          onBack={() => goTo('welcome')}
-          onSubmit={() => goTo('preview')}
+          onBack={goBack}
+          onSubmit={() => {
+            if (isComplete) goTo('loading')
+          }}
         />
       )}
 
-      {step === 'preview' && selectedTheme && (
+      {visibleStep === 'loading' && (
+        <LoadingScreen name={childName} durationMs={LOADING_DURATION_MS} onComplete={handleLoadingComplete} />
+      )}
+
+      {visibleStep === 'preview' && selectedTheme && (
         <StoryPreview
-          name={name.trim()}
-          gender={gender}
+          context={{ name: childName, age: childAge, gender }}
           theme={selectedTheme}
-          onBack={() => goTo('details')}
+          onBack={goBack}
         />
       )}
 
@@ -56,7 +90,7 @@ export function OnboardingFlow() {
         open={themeModalOpen}
         selected={themeId}
         onClose={() => setThemeModalOpen(false)}
-        onConfirm={(id) => {
+        onSelect={(id) => {
           setThemeId(id)
           setThemeModalOpen(false)
         }}
