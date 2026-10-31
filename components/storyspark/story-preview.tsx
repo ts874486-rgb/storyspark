@@ -1,10 +1,17 @@
 'use client'
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import { BookOpen, ChevronLeft, Download, Lock, Printer } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { TOTAL_BOOK_PAGES, possessive, type StoryContext, type StoryPage, type StoryTheme } from './themes'
+import { DEFAULT_PLAN_ID, PLANS, formatPrice, getPlan, type PlanId } from './plans'
+import { PricingSheet } from './pricing-sheet'
+import { CheckoutSheet } from './checkout-sheet'
+
+type PaywallStage = 'closed' | 'pricing' | 'checkout'
+
+const STARTING_PRICE = formatPrice(Math.min(...PLANS.map((p) => p.priceCents)))
 
 type StoryPreviewProps = {
   context: StoryContext
@@ -72,7 +79,17 @@ function PageCard({ page, index, title, priority }: { page: StoryPage; index: nu
   )
 }
 
-function LockedCard({ name, image, remaining }: { name: string; image: string; remaining: number }) {
+function LockedCard({
+  name,
+  image,
+  remaining,
+  onUnlock,
+}: {
+  name: string
+  image: string
+  remaining: number
+  onUnlock: () => void
+}) {
   return (
     <article
       aria-label="Locked pages"
@@ -89,6 +106,14 @@ function LockedCard({ name, image, remaining }: { name: string; image: string; r
           <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
             Find out how {possessive(name)} adventure ends in the full illustrated book.
           </p>
+          <button
+            type="button"
+            onClick={onUnlock}
+            className="mt-5 flex h-11 items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-primary-foreground shadow-md transition active:scale-95"
+          >
+            <Lock className="size-4" aria-hidden="true" />
+            Unlock pages
+          </button>
         </div>
       </div>
     </article>
@@ -103,6 +128,21 @@ export function StoryPreview({ context, theme, onBack }: StoryPreviewProps) {
 
   const trackRef = useRef<HTMLDivElement>(null)
   const [activeIndex, setActiveIndex] = useState(0)
+  const [paywall, setPaywall] = useState<PaywallStage>('closed')
+  const [planId, setPlanId] = useState<PlanId>(DEFAULT_PLAN_ID)
+  const selectedPlan = getPlan(planId)
+
+  useEffect(() => {
+    if (paywall === 'closed') return
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = previous
+    }
+  }, [paywall])
+
+  const openPricing = () => setPaywall('pricing')
+  const closePaywall = () => setPaywall('closed')
 
   function handleScroll() {
     const track = trackRef.current
@@ -155,7 +195,12 @@ export function StoryPreview({ context, theme, onBack }: StoryPreviewProps) {
           </div>
         ))}
         <div className="w-[88%] shrink-0 snap-center">
-          <LockedCard name={context.name} image={pages[pages.length - 1].image} remaining={remaining} />
+          <LockedCard
+            name={context.name}
+            image={pages[pages.length - 1].image}
+            remaining={remaining}
+            onUnlock={openPricing}
+          />
         </div>
       </div>
 
@@ -191,21 +236,39 @@ export function StoryPreview({ context, theme, onBack }: StoryPreviewProps) {
               <Printer className="size-5" aria-hidden="true" />
             </span>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-bold leading-tight">Unlock Full HD Printable PDF for $4.99</p>
+              <p className="text-sm font-bold leading-tight">Unlock Full HD Printable PDF from {STARTING_PRICE}</p>
               <p className="mt-0.5 text-xs text-background/60">
-                {TOTAL_BOOK_PAGES} illustrated pages · Instant download
+                {TOTAL_BOOK_PAGES} illustrated pages · Plans for every reader
               </p>
             </div>
           </div>
           <button
             type="button"
+            onClick={openPricing}
+            aria-haspopup="dialog"
             className="relative mt-3 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-spark-gradient text-sm font-bold text-white transition active:scale-[0.98] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/40"
           >
             <Download className="size-4.5" aria-hidden="true" />
-            Unlock Full Story · $4.99
+            Unlock Full Story
           </button>
         </div>
       </div>
+
+      <PricingSheet
+        open={paywall === 'pricing'}
+        childName={context.name}
+        selectedPlanId={planId}
+        onSelectPlan={setPlanId}
+        onContinue={() => setPaywall('checkout')}
+        onClose={closePaywall}
+      />
+      <CheckoutSheet
+        open={paywall === 'checkout'}
+        plan={selectedPlan}
+        childName={context.name}
+        onBack={openPricing}
+        onClose={closePaywall}
+      />
     </section>
   )
 }
